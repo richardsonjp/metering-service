@@ -1,0 +1,304 @@
+{
+  "info": {
+    "_postman_id": "9b1d3f2a-7c4e-4a90-8d11-met3r1ngc011",
+    "name": "Metering Service",
+    "description": "In-memory API & storage metering service.\n\nEndpoints:\n- GET  /health          — liveness probe\n- POST /api/endpoint1   — track a request (metered; 429 when the request cap is hit)\n- GET  /api/metrics     — per-endpoint request counts + totals\n- POST /upload          — upload an image/video and track its size (multipart `file`)\n- GET  /storage         — total storage used\n\nSet the `baseUrl` collection variable (default http://localhost:8080) or use the bundled environment. Start the server with `make run`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('body reports ok', () => pm.expect(pm.response.text()).to.include('ok'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Liveness probe. Always returns 200 while the process is up. Not metered."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "cookie": [],
+              "body": "{\"message\":\"ok\"}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "API Metering",
+      "item": [
+        {
+          "name": "Track request to endpoint1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200 (admitted) or 429 (cap reached)', () => pm.expect([200, 429]).to.include(pm.response.code));",
+                  "if (pm.response.code === 200) {",
+                  "  const d = pm.response.json().data;",
+                  "  pm.test('returns endpoint/count/total/remaining', () => {",
+                  "    pm.expect(d).to.have.property('endpoint');",
+                  "    pm.expect(d).to.have.property('count');",
+                  "    pm.expect(d).to.have.property('total');",
+                  "    pm.expect(d).to.have.property('remaining');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/endpoint1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "endpoint1"]
+            },
+            "description": "Meters a request to endpoint1: increments this endpoint's counter and the global request total. Returns 429 (REQUEST_LIMIT_EXCEEDED) once the global REQUEST_LIMIT is reached. No request body is required."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "url": { "raw": "{{baseUrl}}/api/endpoint1", "host": ["{{baseUrl}}"], "path": ["api", "endpoint1"] }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "cookie": [],
+              "body": "{\"message\":\"request recorded\",\"data\":{\"endpoint\":\"/api/endpoint1\",\"count\":1,\"total\":1,\"remaining\":999}}"
+            },
+            {
+              "name": "429 Too Many Requests",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "url": { "raw": "{{baseUrl}}/api/endpoint1", "host": ["{{baseUrl}}"], "path": ["api", "endpoint1"] }
+              },
+              "status": "Too Many Requests",
+              "code": 429,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "cookie": [],
+              "body": "{\"code\":\"REQUEST_LIMIT_EXCEEDED\",\"message\":\"API request limit reached; access is stopped\",\"status\":429,\"details\":[\"global request limit reached for \\\"/api/endpoint1\\\"\"]}"
+            }
+          ]
+        },
+        {
+          "name": "Get metrics",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('returns endpoints map and totals', () => {",
+                  "  const d = pm.response.json().data;",
+                  "  pm.expect(d).to.have.property('endpoints');",
+                  "  pm.expect(d).to.have.property('total_requests');",
+                  "  pm.expect(d).to.have.property('limit');",
+                  "  pm.expect(d).to.have.property('remaining');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/metrics",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "metrics"]
+            },
+            "description": "Returns per-endpoint request counts and the global total/limit/remaining (plus best-effort last_seen). Not metered."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{baseUrl}}/api/metrics", "host": ["{{baseUrl}}"], "path": ["api", "metrics"] }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "cookie": [],
+              "body": "{\"data\":{\"endpoints\":{\"/api/endpoint1\":1,\"/upload\":1},\"total_requests\":2,\"limit\":1000,\"remaining\":998,\"last_seen\":{\"/api/endpoint1\":\"2026-06-06T02:35:56Z\"}}}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Storage Metering",
+      "item": [
+        {
+          "name": "Upload file",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201 or a documented rejection (400/413/415/429/507)', () => pm.expect([201, 400, 413, 415, 429, 507]).to.include(pm.response.code));",
+                  "if (pm.response.code === 201) {",
+                  "  const d = pm.response.json().data;",
+                  "  pm.test('returns filename/size/total_used', () => {",
+                  "    pm.expect(d).to.have.property('filename');",
+                  "    pm.expect(d).to.have.property('size');",
+                  "    pm.expect(d).to.have.property('total_used_bytes');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Select an image or video file. Only image/* and video/* are accepted (detected by magic bytes); other types are rejected with 415. Postman sets the multipart/form-data Content-Type automatically."
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/upload",
+              "host": ["{{baseUrl}}"],
+              "path": ["upload"]
+            },
+            "description": "Uploads a file and meters its size against the global storage budget. multipart/form-data with a single `file` field.\n\nOnly images and videos are accepted. Errors: 400 FILE_REQUIRED (missing/empty), 413 FILE_TOO_LARGE (over MAX_UPLOAD_BYTES), 415 UNSUPPORTED_FILE_TYPE (not image/video), 429 REQUEST_LIMIT_EXCEEDED, 507 STORAGE_LIMIT_EXCEEDED.\n\nNote: the upload is also metered as a request, so it counts toward the request limit."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "" }] },
+                "url": { "raw": "{{baseUrl}}/upload", "host": ["{{baseUrl}}"], "path": ["upload"] }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "cookie": [],
+              "body": "{\"message\":\"file recorded\",\"data\":{\"filename\":\"sample.png\",\"size\":1048576,\"size_human\":\"1.0 MiB\",\"total_used_bytes\":1048576,\"total_used_human\":\"1.0 MiB\",\"remaining_bytes\":1072693248}}"
+            },
+            {
+              "name": "415 Unsupported Media Type",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "" }] },
+                "url": { "raw": "{{baseUrl}}/upload", "host": ["{{baseUrl}}"], "path": ["upload"] }
+              },
+              "status": "Unsupported Media Type",
+              "code": 415,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "cookie": [],
+              "body": "{\"code\":\"UNSUPPORTED_FILE_TYPE\",\"message\":\"Only image and video uploads are allowed\",\"status\":415,\"details\":[\"file type \\\"text/plain; charset=utf-8\\\" is not allowed; only images and videos are accepted\"]}"
+            }
+          ]
+        },
+        {
+          "name": "Get storage usage",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('returns used/limit/remaining bytes', () => {",
+                  "  const d = pm.response.json().data;",
+                  "  pm.expect(d).to.have.property('used_bytes');",
+                  "  pm.expect(d).to.have.property('limit_bytes');",
+                  "  pm.expect(d).to.have.property('remaining_bytes');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/storage",
+              "host": ["{{baseUrl}}"],
+              "path": ["storage"]
+            },
+            "description": "Returns total storage used, the limit, and the remaining capacity (raw bytes + human-readable). Not metered."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{baseUrl}}/storage", "host": ["{{baseUrl}}"], "path": ["storage"] }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "cookie": [],
+              "body": "{\"data\":{\"used_bytes\":1048576,\"used_human\":\"1.0 MiB\",\"limit_bytes\":1073741824,\"limit_human\":\"1.0 GiB\",\"remaining_bytes\":1072693248,\"remaining_human\":\"1023.0 MiB\"}}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
